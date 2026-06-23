@@ -18,7 +18,7 @@ Adds a convenient copy button to Jira Cloud that copies the issue key and title 
 - Copies as both plain text (`DEV-123 Issue Title`) and rich HTML (clickable link)
 - Toast notification confirms successful copy
 
-**[Install](https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Copy%20Key%20and%20Title%20Button.user.js)** | Version 1.6.2
+**[Install](https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Copy%20Key%20and%20Title%20Button.user.js)** | Version 1.6.2
 
 ---
 
@@ -32,7 +32,7 @@ Displays a visual badge showing whether a ticket is on the active Board or in th
 - Works on issue pages and modals
 - Caches results for performance
 
-**[Install](https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Board%20or%20Backlog%20Indicator.user.js)** | Version 1.5.4
+**[Install](https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Board%20or%20Backlog%20Indicator.user.js)** | Version 1.5.4
 
 ---
 

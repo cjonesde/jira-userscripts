@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Jira Copy Key & Title Button
-// @namespace    https://github.com/wuhup/jira-userscripts
+// @namespace    https://github.com/cjonesde/jira-userscripts
 // @version      1.6.2
 // @description  Adds a button to Jira Cloud (full page, modal & Product Discovery) that copies Task Key and Title in multiple formats
 // @author       Christopher Jones
@@ -8,10 +8,10 @@
 // @match        https://*.atlassian.net/jira/*
 // @match        https://*.atlassian.net/*issues*
 // @match        https://*.atlassian.net/jira/polaris/*
-// @homepageURL  https://github.com/wuhup/jira-userscripts
-// @supportURL   https://github.com/wuhup/jira-userscripts/issues
-// @downloadURL  https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Copy%20Key%20and%20Title%20Button.user.js
-// @updateURL    https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Copy%20Key%20and%20Title%20Button.user.js
+// @homepageURL  https://github.com/cjonesde/jira-userscripts
+// @supportURL   https://github.com/cjonesde/jira-userscripts/issues
+// @downloadURL  https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Copy%20Key%20and%20Title%20Button.user.js
+// @updateURL    https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Copy%20Key%20and%20Title%20Button.user.js
 // @grant        none
 // ==/UserScript==
 
