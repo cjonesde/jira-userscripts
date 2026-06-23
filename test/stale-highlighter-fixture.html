@@ -4,16 +4,24 @@
 <meta charset="utf-8">
 <title>Stale Highlighter test fixture</title>
 <!--
-  Local, offline test harness for "Jira Stale Ticket Highlighter.user.js".
-  It mimics a Jira Cloud software board column + a backlog list, and stubs
-  window.fetch so the REAL, unmodified userscript runs against synthetic
-  stale/stuck tickets. Open this file directly (file://) to eyeball the
-  badge placement, or drive it headless for screenshots.
+  Local, offline test harness for "Jira Stale Ticket Highlighter.user.js" (v2).
+  It mimics the DOM shapes Jira Cloud renders and stubs window.fetch so the REAL,
+  unmodified userscript runs against synthetic stale/stuck tickets.
 
-  Issue keys (DEV-xxx) are placed where Jira renders them:
-    - board cards: key in the bottom-left footer
-    - backlog rows: key at the left, vertically centered
-  so we can see whether the stale/stuck badges overlap the key.
+  Covered view shapes (issue #1 acceptance):
+    - software board cards (overlay badges, reserved top strip)
+    - backlog rows as <a> (overlay path)
+    - issue table rows  -> [data-testid*="merged-cell"]            (inline chips)
+    - epic line cards   -> [data-testid*="issue-line-card.card-container"]  (inline chips)
+    - grid backlog      -> [data-testid*="card-contents.card-container"] display:grid (reserved right slot)
+    - description body  -> .ak-renderer-document smart-link        (MUST be left alone)
+    - non-English statuses (statusCategory drives detection, not English names)
+
+  The stub mocks ONE batched /rest/api/3/issue/bulkfetch (plus the paginated
+  changelog endpoint for completeness) and records request counts so the harness
+  can assert "one batched fetch per render". A self-checking panel (top-right)
+  prints PASS/FAIL for every ticket once the script has run. Serve over http
+  (the script uses fetch); file:// is blocked by some headless drivers.
 -->
 <style>
   :root { color-scheme: light; }
@@ -25,7 +33,7 @@
     color: #172b4d;
   }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #5e6c84; margin: 0 0 8px; }
-  .wrap { display: flex; gap: 48px; align-items: flex-start; flex-wrap: wrap; }
+  .wrap { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
 
   /* ---- Software board column ---- */
   .column { width: 280px; background: #f1f2f4; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
@@ -39,14 +47,47 @@
   .key { color: #626f86; font-size: 12px; font-weight: 600; text-decoration: none; letter-spacing: .02em; }
   .avatar { margin-left: auto; width: 24px; height: 24px; border-radius: 50%; background: #ffab00; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
 
-  /* ---- Backlog list ---- */
-  .backlog { width: 620px; background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; overflow: hidden; }
+  /* ---- Backlog list (anchor rows) ---- */
+  .backlog { width: 600px; background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; overflow: hidden; }
   .row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #ebecf0; text-decoration: none; color: #172b4d; }
   .row:last-child { border-bottom: none; }
   .row .type { width: 16px; height: 16px; }
   .row .key { white-space: nowrap; }
   .row .rsummary { font-size: 14px; color: #172b4d; flex: 1; }
   .row .status { font-size: 11px; font-weight: 700; color: #42526e; background: #dfe1e6; border-radius: 3px; padding: 2px 6px; text-transform: uppercase; }
+
+  /* ---- Issue table (merged-cell rows) ---- */
+  .table { width: 600px; background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; overflow: hidden; }
+  .trow { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #ebecf0; }
+  .trow:last-child { border-bottom: none; }
+  .trow .rsummary { font-size: 14px; flex: 1; }
+  .trow .status { font-size: 11px; font-weight: 700; color: #42526e; background: #dfe1e6; border-radius: 3px; padding: 2px 6px; text-transform: uppercase; }
+
+  /* ---- Epic line cards ---- */
+  .lcard { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; margin-bottom: 8px; width: 580px; }
+  .lcard .rsummary { font-size: 14px; flex: 1; }
+
+  /* ---- Grid backlog rows ---- */
+  .gridlist { width: 600px; display: flex; flex-direction: column; gap: 8px; }
+  .grow { display: grid; grid-template-columns: 16px 90px 1fr 90px; align-items: center; gap: 10px; padding: 10px 12px; background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; }
+  .grow .rsummary { font-size: 14px; }
+  .grow .status { font-size: 11px; font-weight: 700; color: #42526e; background: #dfe1e6; border-radius: 3px; padding: 2px 6px; text-transform: uppercase; text-align: center; }
+
+  /* ---- Description renderer (must be left alone) ---- */
+  .descbox { width: 600px; background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; padding: 16px; }
+  .ak-renderer-document p { font-size: 14px; line-height: 1.6; }
+  .ak-renderer-document a { color: #0052cc; }
+
+  /* ---- Assertions panel ---- */
+  #jst-test-panel { position: fixed; top: 12px; right: 12px; width: 320px; max-height: 92vh; overflow: auto;
+    background: #fff; border: 1px solid #c1c7d0; border-radius: 8px; box-shadow: 0 6px 20px rgba(9,30,66,.25);
+    font-size: 12px; z-index: 2147483646; }
+  #jst-test-panel h3 { margin: 0; padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #ebecf0; }
+  #jst-test-panel .summary-line { padding: 8px 12px; font-weight: 700; border-bottom: 1px solid #ebecf0; }
+  #jst-test-panel ul { list-style: none; margin: 0; padding: 0; }
+  #jst-test-panel li { padding: 4px 12px; border-bottom: 1px solid #f4f5f7; display: flex; gap: 6px; }
+  #jst-test-panel li .badge { font-weight: 700; flex: none; width: 36px; }
+  .pass { color: #216e4e; } .fail { color: #ae2a19; }
 </style>
 </head>
 <body>
@@ -54,69 +95,119 @@
     <div>
       <h2>Software board — column</h2>
       <div class="column" id="board">
-        <!-- DEV-101 STALE only -->
-        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
-          <div data-testid="card-content" class="pcard-inner">
-            <a href="/browse/DEV-101" class="summary">Refactor the export pipeline so report generation runs off the queue</a>
-            <div class="footer"><span class="type"></span><a href="/browse/DEV-101" class="key">DEV-101</a><span class="avatar">CJ</span></div>
-          </div>
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard"><div data-testid="card-content" class="pcard-inner">
+          <a href="/browse/DEV-101" class="summary">Refactor the export pipeline so report generation runs off the queue</a>
+          <div class="footer"><span class="type"></span><a href="/browse/DEV-101" class="key">DEV-101</a><span class="avatar">CJ</span></div>
+        </div></div>
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard"><div data-testid="card-content" class="pcard-inner">
+          <a href="/browse/DEV-102" class="summary">Investigate flaky login E2E on staging</a>
+          <div class="footer"><span class="type bug"></span><a href="/browse/DEV-102" class="key">DEV-102</a><span class="avatar">DM</span></div>
+        </div></div>
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard"><div data-testid="card-content" class="pcard-inner">
+          <a href="/browse/DEV-103" class="summary">Asset register infinite scroll, batches of 50</a>
+          <div class="footer"><span class="type story"></span><a href="/browse/DEV-103" class="key">DEV-103</a><span class="avatar">NK</span></div>
+        </div></div>
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard"><div data-testid="card-content" class="pcard-inner">
+          <a href="/browse/DEV-104" class="summary">Document the controls mapping import format</a>
+          <div class="footer"><span class="type"></span><a href="/browse/DEV-104" class="key">DEV-104</a><span class="avatar">CJ</span></div>
+        </div></div>
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard"><div data-testid="card-content" class="pcard-inner">
+          <a href="/browse/DEV-105" class="summary">Wire up the new dashboard tiles</a>
+          <div class="footer"><span class="type story"></span><a href="/browse/DEV-105" class="key">DEV-105</a><span class="avatar">NK</span></div>
+        </div></div>
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard"><div data-testid="card-content" class="pcard-inner">
+          <a href="/browse/DEV-106" class="summary">Copy tweaks on the onboarding modal</a>
+          <div class="footer"><span class="type"></span><a href="/browse/DEV-106" class="key">DEV-106</a><span class="avatar">DM</span></div>
+        </div></div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Non-English statuses</h2>
+      <div class="column" id="board-i18n">
+        <!-- En cours = indeterminate (in progress), stuck in status 20d -->
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard"><div data-testid="card-content" class="pcard-inner">
+          <a href="/browse/DEV-301" class="summary">Optimiser le rendu du tableau de bord</a>
+          <div class="footer"><span class="type"></span><a href="/browse/DEV-301" class="key">DEV-301</a><span class="avatar">LM</span></div>
+        </div></div>
+        <!-- Terminé = done category -> must be skipped despite being old -->
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard"><div data-testid="card-content" class="pcard-inner">
+          <a href="/browse/DEV-302" class="summary">Corriger la pagination des journaux</a>
+          <div class="footer"><span class="type story"></span><a href="/browse/DEV-302" class="key">DEV-302</a><span class="avatar">LM</span></div>
+        </div></div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Backlog — anchor rows</h2>
+      <div class="backlog">
+        <a href="/browse/DEV-201" class="row"><span class="type"></span><span class="key">DEV-201</span><span class="rsummary">Migrate legacy policy templates to bilingual blocks</span><span class="status">Backlog</span></a>
+        <a href="/browse/DEV-202" class="row"><span class="type bug"></span><span class="key">DEV-202</span><span class="rsummary">Audit response export drops attachments over 5 MB</span><span class="status">To Do</span></a>
+        <a href="/browse/DEV-203" class="row"><span class="type story"></span><span class="key">DEV-203</span><span class="rsummary">Add keyboard shortcut for quick issue create</span><span class="status">To Do</span></a>
+      </div>
+
+      <h2 style="margin-top:24px">Issue table — merged-cell rows</h2>
+      <div class="table">
+        <div data-testid="issue-table.merged-cell" class="trow">
+          <span class="type"></span><a href="/browse/DEV-401" class="key">DEV-401</a>
+          <a href="/browse/DEV-401" class="rsummary">Split the billing reconciliation job</a>
+          <span class="status">To Do</span>
         </div>
-        <!-- DEV-102 STUCK (pingpong) -->
-        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
-          <div data-testid="card-content" class="pcard-inner">
-            <a href="/browse/DEV-102" class="summary">Investigate flaky login E2E on staging</a>
-            <div class="footer"><span class="type bug"></span><a href="/browse/DEV-102" class="key">DEV-102</a><span class="avatar">DM</span></div>
-          </div>
-        </div>
-        <!-- DEV-103 STUCK IN STATUS -->
-        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
-          <div data-testid="card-content" class="pcard-inner">
-            <a href="/browse/DEV-103" class="summary">Asset register infinite scroll, batches of 50</a>
-            <div class="footer"><span class="type story"></span><a href="/browse/DEV-103" class="key">DEV-103</a><span class="avatar">NK</span></div>
-          </div>
-        </div>
-        <!-- DEV-104 STALE + STUCK -->
-        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
-          <div data-testid="card-content" class="pcard-inner">
-            <a href="/browse/DEV-104" class="summary">Document the controls mapping import format</a>
-            <div class="footer"><span class="type"></span><a href="/browse/DEV-104" class="key">DEV-104</a><span class="avatar">CJ</span></div>
-          </div>
-        </div>
-        <!-- DEV-105 clean -->
-        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
-          <div data-testid="card-content" class="pcard-inner">
-            <a href="/browse/DEV-105" class="summary">Wire up the new dashboard tiles</a>
-            <div class="footer"><span class="type story"></span><a href="/browse/DEV-105" class="key">DEV-105</a><span class="avatar">NK</span></div>
-          </div>
-        </div>
-        <!-- DEV-106 clean -->
-        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
-          <div data-testid="card-content" class="pcard-inner">
-            <a href="/browse/DEV-106" class="summary">Copy tweaks on the onboarding modal</a>
-            <div class="footer"><span class="type"></span><a href="/browse/DEV-106" class="key">DEV-106</a><span class="avatar">DM</span></div>
-          </div>
+        <div data-testid="issue-table.merged-cell" class="trow">
+          <span class="type bug"></span><a href="/browse/DEV-402" class="key">DEV-402</a>
+          <a href="/browse/DEV-402" class="rsummary">Webhook retries pile up on 5xx</a>
+          <span class="status">To Do</span>
         </div>
       </div>
     </div>
 
     <div>
-      <h2>Backlog — rows</h2>
-      <div class="backlog">
-        <a href="/browse/DEV-201" class="row">
-          <span class="type"></span><span class="key">DEV-201</span>
-          <span class="rsummary">Migrate legacy policy templates to bilingual blocks</span>
+      <h2>Epic line cards</h2>
+      <div id="epic">
+        <div data-testid="issue-line-card.card-container" class="lcard">
+          <span class="type story"></span><a href="/browse/DEV-501" class="key">DEV-501</a>
+          <a href="/browse/DEV-501" class="rsummary">Build the SSO group-sync worker</a>
+          <span class="status">In Progress</span>
+        </div>
+      </div>
+
+      <h2 style="margin-top:24px">Grid backlog rows</h2>
+      <div class="gridlist">
+        <div data-testid="software-backlog.card-contents.card-container" class="grow">
+          <span class="type"></span><a href="/browse/DEV-601" class="key">DEV-601</a>
+          <span class="rsummary">Archive cold tenants after 18 months</span>
           <span class="status">Backlog</span>
-        </a>
-        <a href="/browse/DEV-202" class="row">
-          <span class="type bug"></span><span class="key">DEV-202</span>
-          <span class="rsummary">Audit response export drops attachments over 5 MB</span>
+        </div>
+        <div data-testid="software-backlog.card-contents.card-container" class="grow">
+          <span class="type story"></span><a href="/browse/DEV-602" class="key">DEV-602</a>
+          <span class="rsummary">Tidy the empty-state illustration</span>
+          <span class="status">In Progress</span>
+        </div>
+      </div>
+
+      <h2 style="margin-top:24px">Truncated changelog (must page before judging)</h2>
+      <div class="gridlist">
+        <!-- embedded changelog page hides the In Progress transition; only the paginated
+             endpoint reveals it. A partial read would wrongly flag "Stuck (never started)". -->
+        <div data-testid="software-backlog.card-contents.card-container" class="grow">
+          <span class="type"></span><a href="/browse/DEV-801" class="key">DEV-801</a>
+          <span class="rsummary">Long-lived ticket with a big history</span>
           <span class="status">To Do</span>
-        </a>
-        <a href="/browse/DEV-203" class="row">
-          <span class="type story"></span><span class="key">DEV-203</span>
-          <span class="rsummary">Add keyboard shortcut for quick issue create</span>
+        </div>
+        <!-- history bigger than the page cap: never completes, so the script must stay
+             conservative (no "Stuck") instead of judging off a partial read. -->
+        <div data-testid="software-backlog.card-contents.card-container" class="grow">
+          <span class="type"></span><a href="/browse/DEV-802" class="key">DEV-802</a>
+          <span class="rsummary">Ancient ticket, enormous changelog</span>
           <span class="status">To Do</span>
-        </a>
+        </div>
+      </div>
+
+      <h2 style="margin-top:24px">Description body (smart-link, must be untouched)</h2>
+      <div class="descbox">
+        <div class="ak-renderer-document">
+          <p>Blocked on <a href="/browse/DEV-701" data-testid="smart-link">DEV-701</a> which is itself stale. This link must never get a badge.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -124,39 +215,113 @@
   <!-- fetch stub: must run BEFORE the userscript -->
   <script>
   (function () {
+    // Cold-start each load: the script mirrors its cache to sessionStorage (a real feature),
+    // which would otherwise carry over between reloads in the same browser session and make
+    // the "one batched fetch per render" counts non-deterministic.
+    try { sessionStorage.removeItem('jiraStaleHighlighter.cache.v2'); } catch (e) { /* ignore */ }
+
+    // opt into the script's test seam so we can drive deterministic refresh/clear scenarios
+    window.__JST_TEST = {};
+
     const NOW = Date.now();
     const DAY = 86400000;
     const iso = (d) => new Date(NOW - d * DAY).toISOString();
     const hist = (toStatus, daysAgo) => ({ created: iso(daysAgo), items: [{ field: 'status', toString: toStatus }] });
+    // status with explicit category key (new | indeterminate | done)
+    const st = (name, key) => ({ name, statusCategory: { key } });
 
-    // Each fixture is the shape the script reads: fields.{updated,created,status.name} + changelog.histories
+    // Each fixture mirrors the bulkfetch issue shape: { fields:{updated,created,status}, changelog:{histories} }
     const FIXTURES = {
-      // STALE only: previously reached In Progress (so not "stuck/never-started"),
-      // now back in Backlog, no update in 45d.
-      'DEV-101': { fields: { updated: iso(45), created: iso(120), status: { name: 'Backlog' } }, changelog: { histories: [hist('In Progress', 100)] } },
-      // STUCK (never started): 60d old, no progress history, recently touched.
-      'DEV-102': { fields: { updated: iso(3), created: iso(60), status: { name: 'To Do' } }, changelog: { histories: [] } },
-      // STUCK IN STATUS: In Progress, last transitioned 30d ago.
-      'DEV-103': { fields: { updated: iso(3), created: iso(90), status: { name: 'In Progress' } }, changelog: { histories: [hist('In Progress', 30)] } },
-      // STALE + STUCK: old, never progressed, no recent update -> both badges.
-      'DEV-104': { fields: { updated: iso(40), created: iso(70), status: { name: 'To Do' } }, changelog: { histories: [] } },
-      // clean
-      'DEV-105': { fields: { updated: iso(1), created: iso(5), status: { name: 'In Progress' } }, changelog: { histories: [hist('In Progress', 1)] } },
-      'DEV-106': { fields: { updated: iso(2), created: iso(4), status: { name: 'To Do' } }, changelog: { histories: [] } },
-      // backlog rows
-      'DEV-201': { fields: { updated: iso(50), created: iso(130), status: { name: 'Backlog' } }, changelog: { histories: [hist('In Progress', 110)] } }, // stale
-      'DEV-202': { fields: { updated: iso(4), created: iso(45), status: { name: 'To Do' } }, changelog: { histories: [] } }, // stuck
-      'DEV-203': { fields: { updated: iso(2), created: iso(6), status: { name: 'To Do' } }, changelog: { histories: [] } }  // clean
+      // --- software board ---
+      'DEV-101': { fields: { updated: iso(45), created: iso(120), status: st('Backlog', 'new') }, changelog: { histories: [hist('In Progress', 100)] } }, // stale only
+      'DEV-102': { fields: { updated: iso(3),  created: iso(60),  status: st('To Do', 'new') },    changelog: { histories: [] } },                       // stuck
+      'DEV-103': { fields: { updated: iso(3),  created: iso(90),  status: st('In Progress', 'indeterminate') }, changelog: { histories: [hist('In Progress', 30)] } }, // stuck in status
+      'DEV-104': { fields: { updated: iso(40), created: iso(70),  status: st('To Do', 'new') },    changelog: { histories: [] } },                       // stale + stuck
+      'DEV-105': { fields: { updated: iso(1),  created: iso(5),   status: st('In Progress', 'indeterminate') }, changelog: { histories: [hist('In Progress', 1)] } }, // clean
+      'DEV-106': { fields: { updated: iso(2),  created: iso(4),   status: st('To Do', 'new') },    changelog: { histories: [] } },                       // clean
+      // --- non-English ---
+      'DEV-301': { fields: { updated: iso(3),  created: iso(90),  status: st('En cours', 'indeterminate') }, changelog: { histories: [hist('En cours', 20)] } }, // stuck in status (category, not name)
+      'DEV-302': { fields: { updated: iso(80), created: iso(200), status: st('Terminé', 'done') }, changelog: { histories: [] } },                       // done -> skipped
+      // --- backlog anchor rows ---
+      'DEV-201': { fields: { updated: iso(50), created: iso(130), status: st('Backlog', 'new') }, changelog: { histories: [hist('In Progress', 110)] } }, // stale
+      'DEV-202': { fields: { updated: iso(4),  created: iso(45),  status: st('To Do', 'new') },   changelog: { histories: [] } },                        // stuck
+      'DEV-203': { fields: { updated: iso(2),  created: iso(6),   status: st('To Do', 'new') },   changelog: { histories: [] } },                        // clean
+      // --- issue table (merged-cell) ---
+      'DEV-401': { fields: { updated: iso(50), created: iso(130), status: st('To Do', 'new') },   changelog: { histories: [hist('In Progress', 100)] } }, // stale only
+      'DEV-402': { fields: { updated: iso(4),  created: iso(50),  status: st('To Do', 'new') },   changelog: { histories: [] } },                        // stuck
+      // --- epic line card ---
+      'DEV-501': { fields: { updated: iso(2),  created: iso(60),  status: st('In Progress', 'indeterminate') }, changelog: { histories: [hist('In Progress', 25)] } }, // stuck in status
+      // --- grid backlog ---
+      'DEV-601': { fields: { updated: iso(40), created: iso(120), status: st('Backlog', 'new') }, changelog: { histories: [hist('In Progress', 90)] } }, // stale only
+      'DEV-602': { fields: { updated: iso(2),  created: iso(5),   status: st('In Progress', 'indeterminate') }, changelog: { histories: [hist('In Progress', 1)] } }, // clean
+      // --- description smart-link (would be stale+stuck, but must be skipped) ---
+      'DEV-701': { fields: { updated: iso(60), created: iso(200), status: st('To Do', 'new') },   changelog: { histories: [] } },
+      // --- truncated changelog: embedded page omits the In Progress transition (total>page),
+      //     so a partial read says "Stuck (never started)". The paginated endpoint (fullHistories)
+      //     reveals it DID start, so the correct answer is no badge. updated 3d -> not stale. ---
+      'DEV-801': {
+        fields: { updated: iso(3), created: iso(60), status: st('To Do', 'new') },
+        changelog: { histories: [hist('To Do', 4)], total: 4 },
+        fullHistories: [hist('In Progress', 50), hist('To Do', 30), hist('In Progress', 12), hist('To Do', 4)]
+      },
+      // --- history larger than the page cap: paginated endpoint never reports isLast, so the
+      //     script must treat the history as incomplete and NOT fire "Stuck". updated 3d -> not stale. ---
+      'DEV-802': {
+        fields: { updated: iso(3), created: iso(400), status: st('To Do', 'new') },
+        changelog: { histories: [hist('To Do', 4)], total: 100000 },
+        neverComplete: true
+      }
     };
 
+    // request bookkeeping for "one batched fetch per render" assertions
+    window.__jst = { bulkfetchCalls: 0, legacyGets: 0, changelogPages: 0, changelogByKey: {}, requestedKeys: [] };
+
+    const jsonResponse = (obj) => Promise.resolve(new Response(JSON.stringify(obj), {
+      status: 200, headers: { 'Content-Type': 'application/json' }
+    }));
+
     const orig = window.fetch ? window.fetch.bind(window) : null;
-    window.fetch = function (url) {
+    window.fetch = function (url, opts) {
       try {
-        const m = String(url).match(/\/issue\/([A-Z]+-[0-9]+)/);
-        if (m && FIXTURES[m[1]]) {
-          return Promise.resolve(new Response(JSON.stringify(FIXTURES[m[1]]), {
-            status: 200, headers: { 'Content-Type': 'application/json' }
-          }));
+        const u = String(url);
+
+        // batched bulkfetch
+        if (u.indexOf('/issue/bulkfetch') !== -1) {
+          window.__jst.bulkfetchCalls++;
+          const body = JSON.parse((opts && opts.body) || '{}');
+          const keys = body.issueIdsOrKeys || [];
+          keys.forEach((k) => window.__jst.requestedKeys.push(k));
+          const issues = [], issueErrors = [];
+          keys.forEach((k) => {
+            if (FIXTURES[k]) issues.push({ key: k, fields: FIXTURES[k].fields, changelog: FIXTURES[k].changelog });
+            else issueErrors.push({ status: 404, elementErrors: { errorMessages: ['not found'], errors: {} }, failedElementNumber: 0 });
+          });
+          return jsonResponse({ issues, issueErrors });
+        }
+
+        // paginated changelog (only hit when embedded changelog is truncated; fixtures are complete)
+        const cm = u.match(/\/issue\/([A-Z]+-[0-9]+)\/changelog/);
+        if (cm && FIXTURES[cm[1]]) {
+          const k = cm[1];
+          window.__jst.changelogPages++;
+          window.__jst.changelogByKey[k] = (window.__jst.changelogByKey[k] || 0) + 1;
+          const fx = FIXTURES[k];
+          if (fx.neverComplete) {
+            // a full page of non-progress entries, and never the last page -> forces the
+            // script to hit its page cap and treat the history as incomplete.
+            const dummy = []; for (let i = 0; i < 100; i++) dummy.push(hist('To Do', 50));
+            return jsonResponse({ values: dummy, startAt: 0, maxResults: 100, total: 100000, isLast: false });
+          }
+          const full = fx.fullHistories || fx.changelog.histories || [];
+          const h = full.map((x) => ({ created: x.created, items: x.items }));
+          return jsonResponse({ values: h, startAt: 0, maxResults: 100, total: h.length, isLast: true });
+        }
+
+        // legacy per-issue GET (should NOT happen in v2; counted so a regression is visible)
+        const lm = u.match(/\/issue\/([A-Z]+-[0-9]+)(\?|$)/);
+        if (lm && FIXTURES[lm[1]]) {
+          window.__jst.legacyGets++;
+          return jsonResponse(Object.assign({ key: lm[1] }, FIXTURES[lm[1]]));
         }
       } catch (e) { /* fall through */ }
       return orig ? orig.apply(this, arguments) : Promise.reject(new Error('no fetch'));
@@ -166,5 +331,154 @@
 
   <!-- the real script under test -->
   <script src="../Jira%20Stale%20Ticket%20Highlighter.user.js"></script>
+
+  <!-- self-checking assertions (runs after the script has applied badges) -->
+  <script>
+  (function () {
+    // expected chip kinds per key (empty array = no badge at all)
+    const EXPECT = {
+      'DEV-101': ['stale'], 'DEV-102': ['stuck'], 'DEV-103': ['status'], 'DEV-104': ['stale', 'stuck'],
+      'DEV-105': [], 'DEV-106': [],
+      'DEV-301': ['status'], 'DEV-302': [],
+      'DEV-201': ['stale'], 'DEV-202': ['stuck'], 'DEV-203': [],
+      'DEV-401': ['stale'], 'DEV-402': ['stuck'],
+      'DEV-501': ['status'],
+      'DEV-601': ['stale'], 'DEV-602': [],
+      'DEV-701': [],
+      'DEV-801': [], // truncated history: paged full changelog shows it DID start -> no badge
+      'DEV-802': []  // history exceeds page cap -> incomplete -> stay conservative, no "Stuck"
+    };
+
+    const kindsFor = (key) => {
+      const chips = document.querySelectorAll('.jst-chip[data-issue-key="' + key + '"]');
+      const kinds = [];
+      chips.forEach((c) => {
+        if (c.classList.contains('jst-chip--stale')) kinds.push('stale');
+        else if (c.classList.contains('jst-chip--stuck')) kinds.push('stuck');
+        else if (c.classList.contains('jst-chip--status')) kinds.push('status');
+      });
+      return kinds.sort();
+    };
+
+    const overlaps = (a, b) => !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+
+    function run() {
+      const results = [];
+      const add = (name, ok, detail) => results.push({ name, ok, detail: detail || '' });
+
+      // 1. per-ticket expected chips
+      Object.keys(EXPECT).forEach((key) => {
+        const got = kindsFor(key);
+        const want = EXPECT[key].slice().sort();
+        add(key, JSON.stringify(got) === JSON.stringify(want), 'want ' + JSON.stringify(want) + ' got ' + JSON.stringify(got));
+      });
+
+      // 2. one batched fetch, no legacy per-issue calls, changelog paged only where needed
+      add('one-bulkfetch', window.__jst.bulkfetchCalls === 1, 'calls=' + window.__jst.bulkfetchCalls);
+      add('no-legacy-gets', window.__jst.legacyGets === 0, 'legacy=' + window.__jst.legacyGets);
+      add('dev801-paged-once', window.__jst.changelogByKey['DEV-801'] === 1, 'pages=' + window.__jst.changelogByKey['DEV-801']);
+      add('dev802-paged-past-old-cap', window.__jst.changelogByKey['DEV-802'] > 5, 'pages=' + window.__jst.changelogByKey['DEV-802']); // proves it kept paging, then capped + stayed conservative
+
+      // 3. the smart-link in the description was never even requested
+      add('smartlink-not-fetched', window.__jst.requestedKeys.indexOf('DEV-701') === -1, 'requested=' + window.__jst.requestedKeys.length);
+      add('smartlink-no-badge', document.querySelectorAll('.ak-renderer-document .jira-stale-indicator').length === 0);
+
+      // 4. placement: chips never cover the issue key
+      const chip101 = document.querySelector('.jst-chip[data-issue-key="DEV-101"]');
+      const key101 = document.querySelector('.column .key[href="/browse/DEV-101"]');
+      if (chip101 && key101) add('board-no-key-overlap', !overlaps(chip101.getBoundingClientRect(), key101.getBoundingClientRect()));
+
+      const chip401 = document.querySelector('.jst-chip[data-issue-key="DEV-401"]');
+      const key401 = document.querySelector('.trow .key[href="/browse/DEV-401"]');
+      if (chip401 && key401) {
+        const cr = chip401.getBoundingClientRect(), kr = key401.getBoundingClientRect();
+        add('table-chip-after-key', cr.left >= kr.right - 1 && !overlaps(cr, kr), 'chip.left=' + Math.round(cr.left) + ' key.right=' + Math.round(kr.right));
+      }
+
+      const wrap601 = document.querySelector('.jst-grid-wrap[data-issue-key="DEV-601"]');
+      const key601 = document.querySelector('.grow .key[href="/browse/DEV-601"]');
+      if (wrap601 && key601) {
+        const wr = wrap601.getBoundingClientRect(), kr = key601.getBoundingClientRect();
+        add('grid-chip-clear-of-key', !overlaps(wr, kr) && wr.left > kr.right, 'wrap.left=' + Math.round(wr.left) + ' key.right=' + Math.round(kr.right));
+      }
+
+      const passed = results.filter((r) => r.ok).length;
+      window.__jstResults = { passed, total: results.length, results };
+
+      // render panel
+      const panel = document.createElement('div');
+      panel.id = 'jst-test-panel';
+      const h = document.createElement('h3'); h.textContent = 'Stale Highlighter — self-check'; panel.appendChild(h);
+      const sum = document.createElement('div');
+      sum.className = 'summary-line ' + (passed === results.length ? 'pass' : 'fail');
+      sum.textContent = passed + ' / ' + results.length + (passed === results.length ? ' PASS' : ' — FAILURES');
+      panel.appendChild(sum);
+      const ul = document.createElement('ul');
+      results.forEach((r) => {
+        const li = document.createElement('li');
+        const b = document.createElement('span'); b.className = 'badge ' + (r.ok ? 'pass' : 'fail'); b.textContent = r.ok ? 'PASS' : 'FAIL';
+        const t = document.createElement('span'); t.textContent = r.name + (r.ok ? '' : ' (' + r.detail + ')');
+        li.appendChild(b); li.appendChild(t); ul.appendChild(li);
+      });
+      panel.appendChild(ul);
+      const old = document.getElementById('jst-test-panel'); if (old) old.remove();
+      document.body.appendChild(panel);
+
+      const appendResult = (name, res) => {
+        results.push({ name: name, ok: res.ok, detail: res.detail });
+        const li = document.createElement('li');
+        const b = document.createElement('span'); b.className = 'badge ' + (res.ok ? 'pass' : 'fail'); b.textContent = res.ok ? 'PASS' : 'FAIL';
+        const t = document.createElement('span'); t.textContent = name + (res.ok ? '' : ' (' + res.detail + ')');
+        li.appendChild(b); li.appendChild(t); ul.appendChild(li);
+        const passed = results.filter((r) => r.ok).length;
+        window.__jstResults = { passed: passed, total: results.length, results: results };
+        sum.className = 'summary-line ' + (passed === results.length ? 'pass' : 'fail');
+        sum.textContent = passed + ' / ' + results.length + (passed === results.length ? ' PASS' : ' — FAILURES');
+      };
+
+      // async reconcile checks, chained
+      runRepaintTest((r5) => {
+        appendResult('repaint-on-change', r5);
+        runClearTest((r6) => appendResult('clear-on-done', r6));
+      });
+    }
+
+    // repaint-on-change: corrupt a painted chip + its render signature, trigger a rescan, and
+    // assert the script repaints it from cache. Old key-only dedup would short-circuit (no repaint).
+    function runRepaintTest(cb) {
+      const chip = document.querySelector('.jst-chip[data-issue-key="DEV-101"]');
+      const host = document.querySelector('[data-stale-checked-key="DEV-101"]');
+      if (!chip || !host) { cb({ ok: false, detail: 'no chip/host found' }); return; }
+      const want = chip.textContent;
+      chip.textContent = 'CORRUPTED';
+      host.dataset.staleSig = 'stale-signature';
+      const noise = document.createElement('div'); noise.textContent = 'x'; document.body.appendChild(noise); // wake the observer
+      setTimeout(() => {
+        const after = document.querySelector('.jst-chip[data-issue-key="DEV-101"]');
+        const txt = after ? after.textContent : '(gone)';
+        cb({ ok: txt === want, detail: 'want "' + want + '" got "' + txt + '"' });
+      }, 300);
+    }
+
+    // clear-on-done: refresh DEV-102 (currently "Stuck") to a Done state via the test seam,
+    // rescan, and assert its badge is removed. The pre-fix early-return left it lingering.
+    function runClearTest(cb) {
+      const T = window.__JST_TEST;
+      const before = document.querySelectorAll('.jst-chip[data-issue-key="DEV-102"]').length;
+      if (!T || typeof T.cacheSet !== 'function' || typeof T.scanPage !== 'function') { cb({ ok: false, detail: 'test seam unavailable' }); return; }
+      if (before === 0) { cb({ ok: false, detail: 'DEV-102 had no badge to clear' }); return; }
+      T.cacheSet('DEV-102', { key: 'DEV-102', isDone: true });
+      T.scanPage();
+      setTimeout(() => {
+        const after = document.querySelectorAll('.jst-chip[data-issue-key="DEV-102"]').length;
+        cb({ ok: after === 0, detail: 'chips after done-refresh=' + after });
+      }, 300);
+    }
+
+    // give the script time to batch-fetch (instant stub) + apply via rAF + the 800ms safety scan
+    setTimeout(run, 1600);
+    window.__jstRerun = run;
+  })();
+  </script>
 </body>
 </html>

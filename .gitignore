@@ -1,0 +1,5 @@
+# gstack / browse runtime session state (contains a local auth token)
+.gstack/
+
+# OS cruft
+.DS_Store
