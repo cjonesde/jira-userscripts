@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         Jira Stale Ticket Highlighter
-// @namespace    https://github.com/wuhup/jira-userscripts
+// @namespace    https://github.com/cjonesde/jira-userscripts
 // @version      1.1.7
 // @description  Highlights stale and stuck tickets on Jira boards with visual indicators
 // @author       Christopher Jones
 // @match        https://*.atlassian.net/*
-// @homepageURL  https://github.com/wuhup/jira-userscripts
-// @supportURL   https://github.com/wuhup/jira-userscripts/issues
-// @downloadURL  https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js
-// @updateURL    https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js
+// @homepageURL  https://github.com/cjonesde/jira-userscripts
+// @supportURL   https://github.com/cjonesde/jira-userscripts/issues
+// @downloadURL  https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js
+// @updateURL    https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js
 // @grant        none
 // ==/UserScript==
 

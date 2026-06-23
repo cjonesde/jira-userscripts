@@ -1,15 +1,15 @@
 // ==UserScript==
 // @name         Jira Board/Backlog Indicator
-// @namespace    https://github.com/wuhup/jira-userscripts
+// @namespace    https://github.com/cjonesde/jira-userscripts
 // @version      1.5.4
 // @description  Display if a ticket is on the Board or in the Backlog with automatic detection
 // @author       Christopher Jones
 // @match        https://*.atlassian.net/jira/*
 // @match        https://*.atlassian.net/browse/*
-// @homepageURL  https://github.com/wuhup/jira-userscripts
-// @supportURL   https://github.com/wuhup/jira-userscripts/issues
-// @downloadURL  https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Board%20or%20Backlog%20Indicator.user.js
-// @updateURL    https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Board%20or%20Backlog%20Indicator.user.js
+// @homepageURL  https://github.com/cjonesde/jira-userscripts
+// @supportURL   https://github.com/cjonesde/jira-userscripts/issues
+// @downloadURL  https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Board%20or%20Backlog%20Indicator.user.js
+// @updateURL    https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Board%20or%20Backlog%20Indicator.user.js
 // @grant        none
 // ==/UserScript==
 

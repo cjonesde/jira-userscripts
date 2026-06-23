@@ -18,7 +18,7 @@ Adds a convenient copy button to Jira Cloud that copies the issue key and title 
 - Copies as both plain text (`DEV-123 Issue Title`) and rich HTML (clickable link)
 - Toast notification confirms successful copy
 
-**[Install](https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Copy%20Key%20and%20Title%20Button.user.js)** | Version 1.6.2
+**[Install](https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Copy%20Key%20and%20Title%20Button.user.js)** | Version 1.6.2
 
 ---
 
@@ -32,7 +32,7 @@ Displays a visual badge showing whether a ticket is on the active Board or in th
 - Works on issue pages and modals
 - Caches results for performance
 
-**[Install](https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Board%20or%20Backlog%20Indicator.user.js)** | Version 1.5.4
+**[Install](https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Board%20or%20Backlog%20Indicator.user.js)** | Version 1.5.4
 
 ---
 
@@ -47,7 +47,7 @@ Highlights stale and stuck tickets on Jira boards with visual indicators.
 
 Works across the board, backlog, list view, epic child items, linked work items, and the issue page. Badges are placed so they never cover the issue key, title, or assignee, and smart-links inside descriptions and comments are left alone.
 
-**[Install](https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js)** | Version 1.1.7
+**[Install](https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js)** | Version 1.1.7
 
 #### Configuration
 
@@ -86,7 +86,7 @@ const CONFIG = {
 - Tampermonkey / Violentmonkey / Greasemonkey
 - **Tested with Jira Cloud as of January 2026**
 
-> **Note:** Atlassian may introduce breaking changes to Jira's frontend at any time without notice. If a script stops working, please [open an issue](https://github.com/wuhup/jira-userscripts/issues).
+> **Note:** Atlassian may introduce breaking changes to Jira's frontend at any time without notice. If a script stops working, please [open an issue](https://github.com/cjonesde/jira-userscripts/issues).
 
 ## License
 
