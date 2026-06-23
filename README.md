@@ -45,38 +45,31 @@ Highlights stale and stuck tickets on Jira boards with visual indicators.
 - 🛑 **Stuck** (orange badge): Old tickets (14+ days) that never reached an active status
 - ⚓ **Stuck in Status** (purple badge): Tickets stuck in the same active status for 14+ days
 
-Works across the board, backlog, list view, epic child items, linked work items, and the issue page. Badges are placed so they never cover the issue key, title, or assignee, and smart-links inside descriptions and comments are left alone.
+Works across the board, backlog, list/table view, epic child items, line cards, linked work items, and the issue page. Badges are placed so they never cover the issue key, title, or assignee, and smart-links inside descriptions and comments are left alone.
 
-**[Install](https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js)** | Version 1.1.7
+**Version 2 highlights:**
+- **One batched API call per render** (`/rest/api/3/issue/bulkfetch`) instead of one request per visible card, with a concurrency cap and 429 backoff.
+- **Status-category detection** (`new` / `indeterminate` / `done`), so it works on renamed or non-English workflows. The status-name lists are now optional overrides.
+- **Settings menu** for tuning thresholds (via your userscript manager), so you no longer have to edit the file.
+- TTL/LRU cache mirrored to `sessionStorage`, changelog pagination, and badge cleanup on navigation.
+
+**[Install](https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js)** | Version 2.0.0
 
 #### Configuration
 
-The script uses status names to determine ticket state. You'll need to edit the `CONFIG` object at the top of the script to match your Jira workflow:
+Open your userscript manager's menu for this script and pick **"⚙ Configure thresholds"** to set:
 
-```javascript
-const CONFIG = {
-    STALE_THRESHOLD_DAYS: 30,      // Days without updates before "Stale"
-    PING_PONG_MIN_AGE_DAYS: 14,    // Days old before "Stuck" (never started)
-    STUCK_IN_STATUS_DAYS: 14,      // Days in same status before "Stuck in Status"
-    PROGRESS_STATUSES: [           // Statuses that mean work has started
-        'In Progress',
-        'Tech Review',
-        'Merged',
-        'Testing',
-        'Ready for Release'
-    ],
-    DONE_STATUSES: [               // Statuses that mean work is complete
-        'Done',
-        'Done (deployed to prod)',
-        'Closed'
-    ]
-};
-```
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| Stale after | 30 days | Days without updates before 🕒 Stale |
+| Stuck after | 14 days | Days old before 🛑 Stuck (never started) |
+| Stuck in status after | 14 days | Days in the same active status before ⚓ Stuck in Status |
+| Progress status names | (optional) | Override the changelog match for "has work started" |
+| Done status names | (optional) | Override which statuses count as complete |
 
-**Important:** Update `PROGRESS_STATUSES` and `DONE_STATUSES` to match the exact status names in your Jira project. The script uses these to determine:
-- Whether a ticket has ever been worked on (for "Stuck" detection)
-- Whether to skip completed tickets
-- Which statuses trigger "Stuck in Status" warnings
+Detection now keys off Jira's **status category** (`To Do` / `In Progress` / `Done`), so completed tickets are skipped and active tickets are flagged even when statuses are renamed or localized. The status-name lists are only needed if your workflow's categories are mis-mapped, or to refine the changelog "has it ever started" check (changelog entries expose status names, not categories).
+
+> The settings menu needs `GM_getValue`/`GM_setValue`, which Tampermonkey, Violentmonkey, and Greasemonkey all provide. Without them the script still runs on its defaults. To change defaults directly, edit the `DEFAULTS` object at the top of the script.
 
 ---
 
@@ -84,7 +77,7 @@ const CONFIG = {
 
 - Jira Cloud (`*.atlassian.net`)
 - Tampermonkey / Violentmonkey / Greasemonkey
-- **Tested with Jira Cloud as of January 2026**
+- **Tested with Jira Cloud as of June 2026**
 
 > **Note:** Atlassian may introduce breaking changes to Jira's frontend at any time without notice. If a script stops working, please [open an issue](https://github.com/cjonesde/jira-userscripts/issues).
 
