@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stale Highlighter test fixture</title>
+<!--
+  Local, offline test harness for "Jira Stale Ticket Highlighter.user.js".
+  It mimics a Jira Cloud software board column + a backlog list, and stubs
+  window.fetch so the REAL, unmodified userscript runs against synthetic
+  stale/stuck tickets. Open this file directly (file://) to eyeball the
+  badge placement, or drive it headless for screenshots.
+
+  Issue keys (DEV-xxx) are placed where Jira renders them:
+    - board cards: key in the bottom-left footer
+    - backlog rows: key at the left, vertically centered
+  so we can see whether the stale/stuck badges overlap the key.
+-->
+<style>
+  :root { color-scheme: light; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: #f4f5f7;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #172b4d;
+  }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #5e6c84; margin: 0 0 8px; }
+  .wrap { display: flex; gap: 48px; align-items: flex-start; flex-wrap: wrap; }
+
+  /* ---- Software board column ---- */
+  .column { width: 280px; background: #f1f2f4; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .pcard { background: #fff; border-radius: 8px; box-shadow: 0 1px 1px rgba(9,30,66,.25), 0 0 1px rgba(9,30,66,.13); }
+  .pcard-inner { padding: 10px 12px; }
+  .summary { display: block; color: #172b4d; font-size: 14px; line-height: 1.3; text-decoration: none; }
+  .footer { display: flex; align-items: center; gap: 6px; margin-top: 14px; }
+  .type { width: 16px; height: 16px; border-radius: 3px; background: #4bade8; flex: none; }
+  .type.story { background: #65ba43; }
+  .type.bug { background: #e5493a; }
+  .key { color: #626f86; font-size: 12px; font-weight: 600; text-decoration: none; letter-spacing: .02em; }
+  .avatar { margin-left: auto; width: 24px; height: 24px; border-radius: 50%; background: #ffab00; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
+
+  /* ---- Backlog list ---- */
+  .backlog { width: 620px; background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #ebecf0; text-decoration: none; color: #172b4d; }
+  .row:last-child { border-bottom: none; }
+  .row .type { width: 16px; height: 16px; }
+  .row .key { white-space: nowrap; }
+  .row .rsummary { font-size: 14px; color: #172b4d; flex: 1; }
+  .row .status { font-size: 11px; font-weight: 700; color: #42526e; background: #dfe1e6; border-radius: 3px; padding: 2px 6px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <h2>Software board — column</h2>
+      <div class="column" id="board">
+        <!-- DEV-101 STALE only -->
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
+          <div data-testid="card-content" class="pcard-inner">
+            <a href="/browse/DEV-101" class="summary">Refactor the export pipeline so report generation runs off the queue</a>
+            <div class="footer"><span class="type"></span><a href="/browse/DEV-101" class="key">DEV-101</a><span class="avatar">CJ</span></div>
+          </div>
+        </div>
+        <!-- DEV-102 STUCK (pingpong) -->
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
+          <div data-testid="card-content" class="pcard-inner">
+            <a href="/browse/DEV-102" class="summary">Investigate flaky login E2E on staging</a>
+            <div class="footer"><span class="type bug"></span><a href="/browse/DEV-102" class="key">DEV-102</a><span class="avatar">DM</span></div>
+          </div>
+        </div>
+        <!-- DEV-103 STUCK IN STATUS -->
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
+          <div data-testid="card-content" class="pcard-inner">
+            <a href="/browse/DEV-103" class="summary">Asset register infinite scroll, batches of 50</a>
+            <div class="footer"><span class="type story"></span><a href="/browse/DEV-103" class="key">DEV-103</a><span class="avatar">NK</span></div>
+          </div>
+        </div>
+        <!-- DEV-104 STALE + STUCK -->
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
+          <div data-testid="card-content" class="pcard-inner">
+            <a href="/browse/DEV-104" class="summary">Document the controls mapping import format</a>
+            <div class="footer"><span class="type"></span><a href="/browse/DEV-104" class="key">DEV-104</a><span class="avatar">CJ</span></div>
+          </div>
+        </div>
+        <!-- DEV-105 clean -->
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
+          <div data-testid="card-content" class="pcard-inner">
+            <a href="/browse/DEV-105" class="summary">Wire up the new dashboard tiles</a>
+            <div class="footer"><span class="type story"></span><a href="/browse/DEV-105" class="key">DEV-105</a><span class="avatar">NK</span></div>
+          </div>
+        </div>
+        <!-- DEV-106 clean -->
+        <div data-testid="platform-board-kit.ui.card.card" class="pcard">
+          <div data-testid="card-content" class="pcard-inner">
+            <a href="/browse/DEV-106" class="summary">Copy tweaks on the onboarding modal</a>
+            <div class="footer"><span class="type"></span><a href="/browse/DEV-106" class="key">DEV-106</a><span class="avatar">DM</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Backlog — rows</h2>
+      <div class="backlog">
+        <a href="/browse/DEV-201" class="row">
+          <span class="type"></span><span class="key">DEV-201</span>
+          <span class="rsummary">Migrate legacy policy templates to bilingual blocks</span>
+          <span class="status">Backlog</span>
+        </a>
+        <a href="/browse/DEV-202" class="row">
+          <span class="type bug"></span><span class="key">DEV-202</span>
+          <span class="rsummary">Audit response export drops attachments over 5 MB</span>
+          <span class="status">To Do</span>
+        </a>
+        <a href="/browse/DEV-203" class="row">
+          <span class="type story"></span><span class="key">DEV-203</span>
+          <span class="rsummary">Add keyboard shortcut for quick issue create</span>
+          <span class="status">To Do</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- fetch stub: must run BEFORE the userscript -->
+  <script>
+  (function () {
+    const NOW = Date.now();
+    const DAY = 86400000;
+    const iso = (d) => new Date(NOW - d * DAY).toISOString();
+    const hist = (toStatus, daysAgo) => ({ created: iso(daysAgo), items: [{ field: 'status', toString: toStatus }] });
+
+    // Each fixture is the shape the script reads: fields.{updated,created,status.name} + changelog.histories
+    const FIXTURES = {
+      // STALE only: previously reached In Progress (so not "stuck/never-started"),
+      // now back in Backlog, no update in 45d.
+      'DEV-101': { fields: { updated: iso(45), created: iso(120), status: { name: 'Backlog' } }, changelog: { histories: [hist('In Progress', 100)] } },
+      // STUCK (never started): 60d old, no progress history, recently touched.
+      'DEV-102': { fields: { updated: iso(3), created: iso(60), status: { name: 'To Do' } }, changelog: { histories: [] } },
+      // STUCK IN STATUS: In Progress, last transitioned 30d ago.
+      'DEV-103': { fields: { updated: iso(3), created: iso(90), status: { name: 'In Progress' } }, changelog: { histories: [hist('In Progress', 30)] } },
+      // STALE + STUCK: old, never progressed, no recent update -> both badges.
+      'DEV-104': { fields: { updated: iso(40), created: iso(70), status: { name: 'To Do' } }, changelog: { histories: [] } },
+      // clean
+      'DEV-105': { fields: { updated: iso(1), created: iso(5), status: { name: 'In Progress' } }, changelog: { histories: [hist('In Progress', 1)] } },
+      'DEV-106': { fields: { updated: iso(2), created: iso(4), status: { name: 'To Do' } }, changelog: { histories: [] } },
+      // backlog rows
+      'DEV-201': { fields: { updated: iso(50), created: iso(130), status: { name: 'Backlog' } }, changelog: { histories: [hist('In Progress', 110)] } }, // stale
+      'DEV-202': { fields: { updated: iso(4), created: iso(45), status: { name: 'To Do' } }, changelog: { histories: [] } }, // stuck
+      'DEV-203': { fields: { updated: iso(2), created: iso(6), status: { name: 'To Do' } }, changelog: { histories: [] } }  // clean
+    };
+
+    const orig = window.fetch ? window.fetch.bind(window) : null;
+    window.fetch = function (url) {
+      try {
+        const m = String(url).match(/\/issue\/([A-Z]+-[0-9]+)/);
+        if (m && FIXTURES[m[1]]) {
+          return Promise.resolve(new Response(JSON.stringify(FIXTURES[m[1]]), {
+            status: 200, headers: { 'Content-Type': 'application/json' }
+          }));
+        }
+      } catch (e) { /* fall through */ }
+      return orig ? orig.apply(this, arguments) : Promise.reject(new Error('no fetch'));
+    };
+  })();
+  </script>
+
+  <!-- the real script under test -->
+  <script src="../Jira%20Stale%20Ticket%20Highlighter.user.js"></script>
+</body>
+</html>

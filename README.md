@@ -45,9 +45,9 @@ Highlights stale and stuck tickets on Jira boards with visual indicators.
 - 🛑 **Stuck** (orange badge): Old tickets (14+ days) that never reached an active status
 - ⚓ **Stuck in Status** (purple badge): Tickets stuck in the same active status for 14+ days
 
-Works on board views, timeline, and backlog.
+Works across the board, backlog, list view, epic child items, linked work items, and the issue page. Badges are placed so they never cover the issue key, title, or assignee, and smart-links inside descriptions and comments are left alone.
 
-**[Install](https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js)** | Version 1.1.5
+**[Install](https://raw.githubusercontent.com/wuhup/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js)** | Version 1.1.7
 
 #### Configuration
 

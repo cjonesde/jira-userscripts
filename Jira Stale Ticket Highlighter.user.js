@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Jira Stale Ticket Highlighter
 // @namespace    https://github.com/wuhup/jira-userscripts
-// @version      1.1.5
+// @version      1.1.7
 // @description  Highlights stale and stuck tickets on Jira boards with visual indicators
 // @author       Christopher Jones
 // @match        https://*.atlassian.net/*
@@ -58,18 +58,18 @@
     function getIssueKeyFromElement(element) {
         // Business Board: The element itself might be the link
         if (element.tagName === 'A' && element.href.includes('/browse/')) {
-            const match = element.href.match(/\/browse\/([A-Z]+-[0-9]+)/);
+            const match = element.href.match(/\/browse\/([A-Z][A-Z0-9]+-[0-9]+)/);
             if (match) return match[1];
         }
 
         // Software Board: Try to find a link inside
         const link = element.querySelector('a[href*="/browse/"]');
         if (link) {
-            const match = link.href.match(/\/browse\/([A-Z]+-[0-9]+)/);
+            const match = link.href.match(/\/browse\/([A-Z][A-Z0-9]+-[0-9]+)/);
             if (match) return match[1];
         }
         // Fallback: check text content
-        const textMatch = element.innerText.match(/([A-Z]+-[0-9]+)/);
+        const textMatch = element.innerText.match(/([A-Z][A-Z0-9]+-[0-9]+)/);
         return textMatch ? textMatch[1] : null;
     }
 
@@ -77,9 +77,27 @@
     const processedKeys = new Set();
     const CACHE = new Map();
 
+    // True when an element lives inside rendered rich text (description, comments,
+    // activity) or an editor. We must never attach a badge there: those bodies contain
+    // smart-links to other issues, and a badge would overlay the prose.
+    function inRichText(el) {
+        return !!(el && el.closest && el.closest('.ak-renderer-document, .ProseMirror, [contenteditable="true"], [data-testid*="issue.activity"], [data-testid*="comment"]'));
+    }
+
+    // Remove our badges and undo the inline styles/markers we added to a container.
+    // Used when a card/row DOM node is reused by React for a different issue, so we
+    // never leave a previous issue's badge or reserved spacing behind.
+    function clearStaleArtifacts(container) {
+        container.querySelectorAll('.jira-stale-indicator, .jira-stale-indicator-detail').forEach((n) => n.remove());
+        if (container.dataset.staleReservedTop) { container.style.paddingTop = ''; delete container.dataset.staleReservedTop; }
+        if (container.dataset.staleReservedRight) { container.style.paddingRight = ''; delete container.dataset.staleReservedRight; }
+        if (container.dataset.staleBorder) { container.style.border = ''; container.style.boxSizing = ''; delete container.dataset.staleBorder; }
+        delete container.dataset.staleCheckedKey;
+    }
+
     // Helper: Parse Key from URL
     function getIssueKeyFromUrl(url) {
-        const match = url.match(/\/browse\/([A-Z]+-[0-9]+)/);
+        const match = url.match(/\/browse\/([A-Z][A-Z0-9]+-[0-9]+)/);
         if (match) return match[1];
 
         const params = new URLSearchParams(url.split('?')[1]);
@@ -93,15 +111,15 @@
         const key = getIssueKeyFromElement(cardElement);
         if (!key) return;
 
-        // If indicator already exists, skip processing to avoid flickering/loops
-        if (cardElement.querySelector('.jira-stale-indicator')) {
-            return;
-        }
+        // Key-aware skip: only short-circuit if this node already carries an indicator for
+        // the SAME issue. If React reused the node for a different issue, fall through so
+        // applyHighlights can clear the old badge and reapply. (Inline/row badges live on an
+        // ancestor, not inside cardElement, so those dedupe in applyHighlights instead.)
+        const existing = cardElement.querySelector('.jira-stale-indicator');
+        if (existing && existing.dataset.issueKey === key) return;
+        if (!existing && cardElement.dataset.staleCheckedKey === key) return;
 
         if (CACHE.has(key)) {
-            // Ensure clean slate before applying (in case of partial state)
-            cardElement.style.opacity = '';
-            cardElement.style.border = '';
             applyHighlights(cardElement, CACHE.get(key), 'card');
             return;
         }
@@ -151,7 +169,7 @@
         const doneStatusesLower = CONFIG.DONE_STATUSES.map(s => s.toLowerCase());
         const isDone = doneStatusesLower.includes(currentStatusLower);
         if (isDone) {
-            return { isStale: false, isPingPong: false, isStuckInStatus: false, isDone: true };
+            return { key, isStale: false, isPingPong: false, isStuckInStatus: false, isDone: true };
         }
 
         // STALE: No updates for X days
@@ -215,7 +233,7 @@
             }
         }
 
-        return { isStale, isPingPong, isStuckInStatus, daysSinceUpdate, daysSinceCreation, daysInStatus, currentStatus };
+        return { key, isStale, isPingPong, isStuckInStatus, daysSinceUpdate, daysSinceCreation, daysInStatus, currentStatus };
     }
 
     function applyHighlights(element, data, context) {
@@ -245,20 +263,124 @@
 
             const isTimeline = window.location.href.toLowerCase().includes('/timeline');
 
+            // Issue tables and line cards (an epic's child items, list view, JQL results)
+            // render the issue key as a tiny INLINE <a>. An absolute overlay there covers
+            // the key and spills onto the title cell, and reserving vertical padding is a
+            // no-op on inline elements. So flow inline chips into the row's flex container
+            // instead, after the title. This never overlays the key or title.
+            // Dense list rows (issue tables, line cards, backlog cards) render the key as a
+            // tiny inline or screen-reader <a>, and Jira may hand us several elements per row
+            // (key link, summary link, card-contents wrappers). Resolve ONE canonical row
+            // container, dedupe on it, and place chips so they never cover the key, title, or
+            // assignee. Board/business-board cards don't match and keep the overlay path below.
+            let rowContainer = element.closest('[data-testid*="merged-cell"], [data-testid*="issue-line-card.card-container"], [data-testid*="card-contents.card-container"]');
+            if (!rowContainer && element.tagName === 'A') {
+                const st = getComputedStyle(element);
+                const r = element.getBoundingClientRect();
+                // Inline / screen-reader-only key links with no known container: climb to the
+                // first ancestor clearly wider than the key (the row), never the key wrapper.
+                if (st.display.startsWith('inline') || st.position === 'absolute' || r.width < 4) {
+                    let p = element.parentElement, hops = 0;
+                    while (p && hops < 6) {
+                        if (p.getBoundingClientRect().width > r.width + 80) { rowContainer = p; break; }
+                        p = p.parentElement; hops++;
+                    }
+                }
+            }
+            if (!isTimeline && rowContainer) {
+                // Key-aware dedup: one chip set per row. If the row already shows a chip for a
+                // DIFFERENT issue (React reused the node), clear it first; if it was checked for
+                // this issue and needs no chip, skip without reprocessing every scan.
+                const prior = rowContainer.querySelector('.jira-stale-indicator');
+                if (prior) {
+                    if (prior.dataset.issueKey === data.key) return;
+                    clearStaleArtifacts(rowContainer);
+                } else if (rowContainer.dataset.staleCheckedKey === data.key) {
+                    return;
+                }
+                rowContainer.dataset.staleCheckedKey = data.key || '';
+
+                const chipDefs = [];
+                if (data.isStale)         chipDefs.push(['🕒 Stale (' + Math.floor(data.daysSinceUpdate) + 'd)', '#fff0f0', '#ccc', '#666']);
+                if (data.isPingPong)      chipDefs.push(['🛑 Stuck (' + Math.floor(data.daysSinceCreation) + 'd)', '#fff8e1', '#ff9900', '#cc7a00']);
+                if (data.isStuckInStatus) chipDefs.push(['⚓ Stuck: ' + data.currentStatus + ' (' + Math.floor(data.daysInStatus) + 'd)', '#f3e5f5', '#7b1fa2', '#7b1fa2']);
+                if (!chipDefs.length) return; // checked marker already set above
+
+                const mkChip = (def) => {
+                    const chip = document.createElement('div');
+                    chip.className = 'jira-stale-indicator';
+                    chip.dataset.issueKey = data.key || '';
+                    chip.innerText = def[0];
+                    chip.style.cssText = 'display: inline-flex; align-items: center; background: ' + def[1] + '; border: 1px solid ' + def[2] + '; font-size: 10px; line-height: 1.5; padding: 0 5px; border-radius: 4px; color: ' + def[3] + '; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.1); flex: none;';
+                    return chip;
+                };
+
+                if (getComputedStyle(rowContainer).display === 'grid') {
+                    // Grid rows (backlog): appended flow items land in occupied cells, so reserve
+                    // a right-edge slot and pin an absolute wrapper there, clear of every column.
+                    if (getComputedStyle(rowContainer).position === 'static') rowContainer.style.position = 'relative';
+                    if (!rowContainer.dataset.staleReservedRight) {
+                        const cur = parseFloat(getComputedStyle(rowContainer).paddingRight) || 0;
+                        rowContainer.style.paddingRight = (cur + (chipDefs.length * 92 + 14)) + 'px';
+                        rowContainer.dataset.staleReservedRight = '1';
+                    }
+                    const wrap = document.createElement('div');
+                    wrap.className = 'jira-stale-indicator';
+                    wrap.dataset.issueKey = data.key || '';
+                    wrap.style.cssText = 'position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; gap: 4px; align-items: center; z-index: 5;';
+                    chipDefs.forEach((d) => wrap.appendChild(mkChip(d)));
+                    rowContainer.appendChild(wrap);
+                } else {
+                    // Flex / inline rows (issue tables, line cards): chips flow in after the title.
+                    chipDefs.forEach((d) => {
+                        const chip = mkChip(d);
+                        chip.style.marginLeft = '8px';
+                        chip.style.verticalAlign = 'middle';
+                        rowContainer.appendChild(chip);
+                    });
+                }
+                return;
+            }
+
+            // Overlay path (kanban board / business-board cards). Key-aware so a card node
+            // reused by React for a different issue can't keep a previous issue's badge, and
+            // a "checked" marker stops us reprocessing cards that need no badge every scan.
+            const priorOverlay = anchor.querySelector('.jira-stale-indicator');
+            if (priorOverlay) {
+                if (priorOverlay.dataset.issueKey === data.key) return;
+                clearStaleArtifacts(anchor);
+            } else if (anchor.dataset.staleCheckedKey === data.key) {
+                return;
+            }
+            anchor.dataset.staleCheckedKey = data.key || '';
+
+            // Reserve a top strip so badges sit ABOVE the card's own content instead
+            // of overlaying it. Without this, the stale badge covers the issue key on
+            // backlog/anchor rows (key is top-left) and the summary on board cards.
+            // Idempotent via a data flag so re-scans don't compound the padding.
+            if (!isTimeline && (data.isStale || data.isPingPong || data.isStuckInStatus)) {
+                if (!anchor.dataset.staleReservedTop) {
+                    const currentPadTop = parseFloat(getComputedStyle(anchor).paddingTop) || 0;
+                    anchor.style.paddingTop = (currentPadTop + 20) + 'px';
+                    anchor.dataset.staleReservedTop = '1';
+                }
+            }
+
             // 1. STALE (Updates)
             if (data.isStale) {
                 // Software default
                 const indicator = document.createElement('div');
                 indicator.className = 'jira-stale-indicator';
+                indicator.dataset.issueKey = data.key || '';
                 indicator.innerText = `🕒 Stale (${Math.floor(data.daysSinceUpdate)}d)`;
 
                 // Default styling (Software Boards - div cards)
-                let css = 'position: absolute; top: -6px; left: 10px; background: #fff0f0; border: 1px solid #ccc; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #666; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
+                let css = 'position: absolute; top: 4px; left: 8px; background: #fff0f0; border: 1px solid #ccc; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #666; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
 
                 // Business Boards (Anchor cards) - Place inside to avoid clipping/grid issues
                 if (element.tagName === 'A') {
                     // Use positive top to place inside card, avoid breaking grid layout
-                    css = 'position: absolute; top: 2px; left: 2px; background: #fff0f0; border: 1px solid #ccc; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #666; z-index: 1000; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
+                    css = 'position: absolute; top: 4px; left: 8px; background: #fff0f0; border: 1px solid #ccc; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #666; z-index: 1000; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
                 }
 
                 if (isTimeline) {
@@ -275,17 +397,19 @@
                 if (!isTimeline) {
                     anchor.style.border = '2px solid #ff9900';
                     anchor.style.boxSizing = 'border-box';
+                    anchor.dataset.staleBorder = '1';
                 }
 
                 const ppIndicator = document.createElement('div');
                 ppIndicator.className = 'jira-stale-indicator';
+                ppIndicator.dataset.issueKey = data.key || '';
                 ppIndicator.innerText = `🛑 Stuck (${Math.floor(data.daysSinceCreation)}d)`;
 
-                let css = 'position: absolute; top: -6px; right: 10px; background: #fff8e1; border: 1px solid #ff9900; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #cc7a00; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
+                let css = 'position: absolute; top: 4px; right: 8px; background: #fff8e1; border: 1px solid #ff9900; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #cc7a00; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
 
                 // Business Boards
                 if (element.tagName === 'A') {
-                    css = 'position: absolute; top: 2px; right: 2px; background: #fff8e1; border: 1px solid #ff9900; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #cc7a00; z-index: 1000; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
+                    css = 'position: absolute; top: 4px; right: 8px; background: #fff8e1; border: 1px solid #ff9900; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #cc7a00; z-index: 1000; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
                 }
 
                 if (isTimeline) {
@@ -301,12 +425,13 @@
             if (data.isStuckInStatus) {
                 const stuckIndicator = document.createElement('div');
                 stuckIndicator.className = 'jira-stale-indicator';
+                stuckIndicator.dataset.issueKey = data.key || '';
                 stuckIndicator.innerText = `⚓ Stuck: ${data.currentStatus} (${Math.floor(data.daysInStatus)}d)`;
 
-                let css = 'position: absolute; top: -6px; right: 10px; background: #f3e5f5; border: 1px solid #7b1fa2; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #7b1fa2; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
+                let css = 'position: absolute; top: 4px; right: 8px; background: #f3e5f5; border: 1px solid #7b1fa2; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #7b1fa2; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
 
                 if (element.tagName === 'A') {
-                    css = 'position: absolute; top: 2px; right: 2px; background: #f3e5f5; border: 1px solid #7b1fa2; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #7b1fa2; z-index: 1000; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
+                    css = 'position: absolute; top: 4px; right: 8px; background: #f3e5f5; border: 1px solid #7b1fa2; font-size: 10px; padding: 1px 4px; border-radius: 4px; color: #7b1fa2; z-index: 1000; box-shadow: 0 1px 2px rgba(0,0,0,0.1);';
                 }
 
                 if (isTimeline) {
@@ -316,6 +441,7 @@
                     // Only apply border if NOT timeline
                     anchor.style.border = '2px solid #7b1fa2';
                     anchor.style.boxSizing = 'border-box';
+                    anchor.dataset.staleBorder = '1';
                 }
 
                 stuckIndicator.style.cssText = css;
@@ -348,7 +474,7 @@
 
                 // Try copy button first
                 const copyButton = element.querySelector('.jira-universal-copy-button-wrapper');
-                if (copyButton && copyButton.offsetParent) {
+                if (copyButton && copyButton.offsetParent && !inRichText(copyButton)) {
                     if (copyButton.nextSibling && copyButton.nextSibling.classList && copyButton.nextSibling.classList.contains('jira-stale-indicator-detail')) return;
 
                     log('Placing detail indicator next to Copy Button');
@@ -358,7 +484,7 @@
 
                 // Try action bar
                 const actionBar = element.querySelector('[data-testid="issue.views.issue-base.foundation.quick-add.quick-add-container"]');
-                if (actionBar) {
+                if (actionBar && !inRichText(actionBar)) {
                     if (actionBar.previousSibling && actionBar.previousSibling.classList && actionBar.previousSibling.classList.contains('jira-stale-indicator-detail')) return;
 
                     log('Placing detail indicator before Action Bar');
@@ -366,11 +492,15 @@
                     return;
                 }
 
-                // Try breadcrumbs
+                // Try breadcrumbs (never inside the description/comment rich-text body)
                 let breadcrumbs = element.querySelector('[data-testid*="breadcrumbs"]');
+                if (breadcrumbs && inRichText(breadcrumbs)) breadcrumbs = null;
 
                 if (!breadcrumbs && data.key) {
-                    const keyLink = document.querySelector(`a[href*="/browse/${data.key}"]`);
+                    // Pick a key link that is NOT a smart-link inside prose, so the badge lands
+                    // on the breadcrumb/header, never mid-description.
+                    const keyLink = [...document.querySelectorAll(`a[href*="/browse/${data.key}"]`)]
+                        .find((a) => !inRichText(a) && a.getBoundingClientRect().width > 0);
                     if (keyLink) {
                         breadcrumbs = keyLink;
                         log('Found issue key link directly:', data.key);
@@ -391,13 +521,13 @@
                     'h1',
                     '[data-testid="issue.views.issue-base.foundation.summary.heading"]',
                     '[data-testid="issue-field-summary.ui.issue-field-summary-inline-edit--container"]',
-                    'div[data-testid*="summary"]',
-                    'div[role="presentation"]'
+                    'div[data-testid*="summary"]'
                 ];
 
                 for (const sel of summarySelectors) {
                     const found = element.querySelectorAll(sel);
                     for (const summary of found) {
+                        if (inRichText(summary)) continue; // never inside description/comment body
                         if (summary.innerText && summary.innerText.trim().length > 0) {
                             if (summary.querySelector('.jira-stale-indicator-detail')) return;
 
@@ -425,7 +555,7 @@
         if (!key) {
             const breadcrumbLink = containerElement.querySelector('a[href*="/browse/"]');
             if (breadcrumbLink) {
-                const match = breadcrumbLink.href.match(/\/browse\/([A-Z]+-[0-9]+)/);
+                const match = breadcrumbLink.href.match(/\/browse\/([A-Z][A-Z0-9]+-[0-9]+)/);
                 if (match) key = match[1];
             }
         }
@@ -445,7 +575,10 @@
         if (isBoardHeader || insideBoardHeader) return;
 
         const existingIndicator = containerElement.querySelector('.jira-stale-indicator-detail');
-        if (existingIndicator) return;
+        if (existingIndicator) {
+            if (existingIndicator.dataset.issueKey === key) return;
+            existingIndicator.remove(); // container reused for a different issue
+        }
 
         if (CACHE.has(key)) {
             applyHighlights(containerElement, CACHE.get(key), 'detail');
@@ -465,11 +598,14 @@
                 let card = null;
 
                 if (el.tagName === 'A') {
-                    if (/\/browse\/[A-Z]+-[0-9]+/.test(el.href)) {
+                    if (/\/browse\/[A-Z][A-Z0-9]+-[0-9]+/.test(el.href)) {
                         const isInsideSoftwareCard = el.closest('div[data-testid="platform-board-kit.ui.card.card"], div.ghx-issue, div.js-issue, div[data-testid*="card-content"]');
                         const isInsideView = el.closest('div[role="dialog"], div[data-testid*="modal-dialog"], #jira-issue-header, [data-testid*="issue.views.issue-base.foundation.summary.heading"]');
 
-                        const isInsideEditor = el.closest('.ProseMirror, [contenteditable="true"], input, textarea');
+                        // Skip links inside rich-text (description, comments, activity): both the
+                        // editor (.ProseMirror) and the read-only renderer (.ak-renderer-document).
+                        // Smart-links in prose are not list rows and must not be badged.
+                        const isInsideEditor = el.closest('.ProseMirror, [contenteditable="true"], input, textarea, .ak-renderer-document');
 
                         if (!isInsideSoftwareCard && !isInsideView && !isInsideEditor) {
                             card = el;
