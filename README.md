@@ -53,7 +53,7 @@ Works across the board, backlog, list/table view, epic child items, line cards, 
 - **Settings menu** for tuning thresholds (via your userscript manager), so you no longer have to edit the file.
 - TTL/LRU cache mirrored to `sessionStorage`, changelog pagination, and badge cleanup on navigation.
 
-**[Install](https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js)** | Version 2.0.0
+**[Install](https://raw.githubusercontent.com/cjonesde/jira-userscripts/main/Jira%20Stale%20Ticket%20Highlighter.user.js)** | Version 2.0.1
 
 #### Configuration
 

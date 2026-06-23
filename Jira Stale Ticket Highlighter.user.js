@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Jira Stale Ticket Highlighter
 // @namespace    https://github.com/cjonesde/jira-userscripts
-// @version      2.0.0
+// @version      2.0.1
 // @description  Highlights stale and stuck tickets on Jira boards with visual indicators
 // @author       Christopher Jones
 // @match        https://*.atlassian.net/*
@@ -96,7 +96,7 @@
     let CONFIG = Object.assign({}, DEFAULTS); // sync defaults until loadConfig() resolves in init()
 
     const log = (...args) => { if (CONFIG.DEBUG) console.log('[Jira Stale Highlighter]', ...args); };
-    console.log('[Jira Stale Highlighter] v2.0.0 loaded');
+    console.log('[Jira Stale Highlighter] v2.0.1 loaded');
 
     const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -448,12 +448,15 @@
         return chips;
     }
 
-    // Single form (priority order), used by the issue-detail header where one badge reads best.
-    function detailSpec(data) {
-        if (data.isStale) return ['stale', `🕒 Stale (${Math.floor(data.daysSinceUpdate)}d)`];
-        if (data.isPingPong) return ['stuck', `🛑 Stuck (${Math.floor(data.daysSinceCreation)}d)`];
-        if (data.isStuckInStatus) return ['status', `⚓ Stuck in ${data.currentStatus} (${Math.floor(data.daysInStatus)}d)`];
-        return null;
+    // Full set (priority order), used by the issue-detail header. Mirrors signalChips so the
+    // detail view shows every active signal too, but keeps the "Stuck in <status>" wording that
+    // reads better in a header than the board's compact "Stuck: <status>".
+    function detailSpecs(data) {
+        const specs = [];
+        if (data.isStale) specs.push(['stale', `🕒 Stale (${Math.floor(data.daysSinceUpdate)}d)`]);
+        if (data.isPingPong) specs.push(['stuck', `🛑 Stuck (${Math.floor(data.daysSinceCreation)}d)`]);
+        if (data.isStuckInStatus) specs.push(['status', `⚓ Stuck in ${data.currentStatus} (${Math.floor(data.daysInStatus)}d)`]);
+        return specs;
     }
 
     // ---------------------------------------------------------------------------
@@ -581,38 +584,42 @@
         });
     }
 
-    // Issue-detail header: one badge, near the key/breadcrumb, never inside the description.
+    // Issue-detail header: one badge per active signal, near the key/breadcrumb, never inside
+    // the description. All badges live in a single wrapper so the whole set shares one insertion
+    // point and one dedupe anchor (issueKey + signature).
     function placeDetail(element, data) {
         const key = data.key || '';
         const sig = dataSig(data);
-        const spec = detailSpec(data);
-        if (!spec) {
-            // Refreshed to a non-flagged state (clean / done / skip). The issue view shows one
-            // issue, so any detail badge present is now obsolete - remove it.
-            const obsolete = element.querySelector('.jira-stale-indicator-detail');
-            if (obsolete) obsolete.remove();
-            return;
-        }
+        const specs = detailSpecs(data);
 
         const existing = element.querySelector('.jira-stale-indicator-detail');
         if (existing) {
-            if (existing.dataset.issueKey === key && existing.dataset.staleSig === sig) return;
-            existing.remove(); // different issue, or this issue's state changed -> repaint
+            // Up-to-date badges for this issue+state already present -> nothing to repaint.
+            if (specs.length && existing.dataset.issueKey === key && existing.dataset.staleSig === sig) return;
+            // Cleared (clean/done/skip), a different issue, or this issue's state changed ->
+            // drop every badge we placed and repaint. querySelectorAll covers the wrapper and,
+            // defensively, any stray badge from an older single-badge build.
+            element.querySelectorAll('.jira-stale-indicator-detail').forEach((n) => n.remove());
         }
+        if (!specs.length) return; // refreshed to a non-flagged state: leave nothing behind.
 
-        const badge = makeDetailBadge(spec[0], spec[1], key);
-        badge.dataset.staleSig = sig;
+        const wrap = document.createElement('span');
+        wrap.className = 'jira-stale-indicator-detail jst-detail-wrap';
+        wrap.setAttribute('data-issue-key', key);
+        wrap.dataset.issueKey = key;
+        wrap.dataset.staleSig = sig;
+        specs.forEach(([kind, label]) => wrap.appendChild(makeDetailBadge(kind, label, key)));
 
         // 1. Next to our companion copy button, if present.
         const copyButton = element.querySelector('.jira-universal-copy-button-wrapper');
         if (copyButton && copyButton.offsetParent && !inRichText(copyButton)) {
-            copyButton.parentNode.insertBefore(badge, copyButton.nextSibling);
+            copyButton.parentNode.insertBefore(wrap, copyButton.nextSibling);
             return;
         }
         // 2. Before the action bar.
         const actionBar = element.querySelector('[data-testid="issue.views.issue-base.foundation.quick-add.quick-add-container"]');
         if (actionBar && !inRichText(actionBar)) {
-            actionBar.insertAdjacentElement('beforebegin', badge);
+            actionBar.insertAdjacentElement('beforebegin', wrap);
             return;
         }
         // 3. After breadcrumbs, or a real (non-smart-link) key link.
@@ -624,7 +631,7 @@
             if (keyLink) breadcrumbs = keyLink;
         }
         if (breadcrumbs) {
-            breadcrumbs.insertAdjacentElement('afterend', badge);
+            breadcrumbs.insertAdjacentElement('afterend', wrap);
             return;
         }
         // 4. Fall back to the summary heading.
@@ -640,7 +647,7 @@
             for (const summary of found) {
                 if (inRichText(summary)) continue;
                 if (summary.innerText && summary.innerText.trim().length > 0) {
-                    summary.appendChild(badge);
+                    summary.appendChild(wrap);
                     return;
                 }
             }

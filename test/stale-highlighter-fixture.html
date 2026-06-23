@@ -73,6 +73,12 @@
   .grow .rsummary { font-size: 14px; }
   .grow .status { font-size: 11px; font-weight: 700; color: #42526e; background: #dfe1e6; border-radius: 3px; padding: 2px 6px; text-transform: uppercase; text-align: center; }
 
+  /* ---- Issue detail modal ---- */
+  .modal { width: 600px; background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; padding: 16px; box-shadow: 0 8px 24px rgba(9,30,66,.2); }
+  .modal .crumbs { font-size: 12px; color: #5e6c84; margin-bottom: 10px; }
+  .modal .crumbs a { color: #5e6c84; text-decoration: none; }
+  .modal h1 { font-size: 20px; margin: 0; color: #172b4d; }
+
   /* ---- Description renderer (must be left alone) ---- */
   .descbox { width: 600px; background: #fff; border: 1px solid #dfe1e6; border-radius: 6px; padding: 16px; }
   .ak-renderer-document p { font-size: 14px; line-height: 1.6; }
@@ -135,6 +141,16 @@
           <a href="/browse/DEV-302" class="summary">Corriger la pagination des journaux</a>
           <div class="footer"><span class="type story"></span><a href="/browse/DEV-302" class="key">DEV-302</a><span class="avatar">LM</span></div>
         </div></div>
+      </div>
+
+      <h2 style="margin-top:24px">Issue detail modal — stale + stuck</h2>
+      <!-- DEV-104 is both stale AND stuck. The detail view must show BOTH signals, matching
+           the board. A single highest-priority badge here is the bug under test (#3). -->
+      <div role="dialog" data-testid="issue.views.issue-modal" class="modal">
+        <nav class="crumbs" data-testid="issue.views.issue-base.foundation.breadcrumbs.breadcrumb-current-item">
+          <a href="/browse/DEV-104" class="key">DEV-104</a>
+        </nav>
+        <h1 data-testid="issue.views.issue-base.foundation.summary.heading">Document the controls mapping import format</h1>
       </div>
     </div>
 
@@ -360,6 +376,18 @@
       return kinds.sort();
     };
 
+    // detail-view badges use a different class (.jst-detail) than board chips (.jst-chip).
+    const detailKindsFor = (key) => {
+      const badges = document.querySelectorAll('.jst-detail[data-issue-key="' + key + '"]');
+      const kinds = [];
+      badges.forEach((b) => {
+        if (b.classList.contains('jst-detail--stale')) kinds.push('stale');
+        else if (b.classList.contains('jst-detail--stuck')) kinds.push('stuck');
+        else if (b.classList.contains('jst-detail--status')) kinds.push('status');
+      });
+      return kinds.sort();
+    };
+
     const overlaps = (a, b) => !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
 
     function run() {
@@ -372,6 +400,12 @@
         const want = EXPECT[key].slice().sort();
         add(key, JSON.stringify(got) === JSON.stringify(want), 'want ' + JSON.stringify(want) + ' got ' + JSON.stringify(got));
       });
+
+      // 1b. detail modal must show ALL active signals (parity with the board), not just the
+      //     highest-priority one. DEV-104 is stale + stuck -> expect both detail badges.
+      add('detail-modal-all-signals',
+          JSON.stringify(detailKindsFor('DEV-104')) === JSON.stringify(['stale', 'stuck']),
+          'want ["stale","stuck"] got ' + JSON.stringify(detailKindsFor('DEV-104')));
 
       // 2. one batched fetch, no legacy per-issue calls, changelog paged only where needed
       add('one-bulkfetch', window.__jst.bulkfetchCalls === 1, 'calls=' + window.__jst.bulkfetchCalls);
