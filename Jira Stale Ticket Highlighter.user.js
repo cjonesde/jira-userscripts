@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Jira Stale Ticket Highlighter
 // @namespace    https://github.com/cjonesde/jira-userscripts
-// @version      2.0.1
+// @version      2.0.2
 // @description  Highlights stale and stuck tickets on Jira boards with visual indicators
 // @author       Christopher Jones
 // @match        https://*.atlassian.net/*
@@ -96,7 +96,7 @@
     let CONFIG = Object.assign({}, DEFAULTS); // sync defaults until loadConfig() resolves in init()
 
     const log = (...args) => { if (CONFIG.DEBUG) console.log('[Jira Stale Highlighter]', ...args); };
-    console.log('[Jira Stale Highlighter] v2.0.1 loaded');
+    console.log('[Jira Stale Highlighter] v2.0.2 loaded');
 
     const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -439,18 +439,18 @@
         return el;
     }
 
-    // List form, used by overlay / inline / grid (each signal is its own chip).
     function signalChips(data) {
         const chips = [];
-        if (data.isStale) chips.push(['stale', `🕒 Stale (${Math.floor(data.daysSinceUpdate)}d)`]);
-        if (data.isPingPong) chips.push(['stuck', `🛑 Stuck (${Math.floor(data.daysSinceCreation)}d)`]);
+        if (data.isStale && data.isPingPong) {
+            chips.push(['stuck', `🛑 Stuck & Stale (${Math.floor(data.daysSinceCreation)}d)`]);
+        } else {
+            if (data.isStale) chips.push(['stale', `🕒 Stale (${Math.floor(data.daysSinceUpdate)}d)`]);
+            if (data.isPingPong) chips.push(['stuck', `🛑 Stuck (${Math.floor(data.daysSinceCreation)}d)`]);
+        }
         if (data.isStuckInStatus) chips.push(['status', `⚓ Stuck: ${data.currentStatus} (${Math.floor(data.daysInStatus)}d)`]);
         return chips;
     }
 
-    // Full set (priority order), used by the issue-detail header. Mirrors signalChips so the
-    // detail view shows every active signal too, but keeps the "Stuck in <status>" wording that
-    // reads better in a header than the board's compact "Stuck: <status>".
     function detailSpecs(data) {
         const specs = [];
         if (data.isStale) specs.push(['stale', `🕒 Stale (${Math.floor(data.daysSinceUpdate)}d)`]);
