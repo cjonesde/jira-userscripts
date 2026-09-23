@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Jira Stale Ticket Highlighter
 // @namespace    https://github.com/cjonesde/jira-userscripts
-// @version      2.0.2
+// @version      2.0.3
 // @description  Highlights stale and stuck tickets on Jira boards with visual indicators
 // @author       Christopher Jones
 // @match        https://*.atlassian.net/*
@@ -96,7 +96,7 @@
     let CONFIG = Object.assign({}, DEFAULTS); // sync defaults until loadConfig() resolves in init()
 
     const log = (...args) => { if (CONFIG.DEBUG) console.log('[Jira Stale Highlighter]', ...args); };
-    console.log('[Jira Stale Highlighter] v2.0.2 loaded');
+    console.log('[Jira Stale Highlighter] v2.0.3 loaded');
 
     const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -738,13 +738,13 @@
         const targets = [];
         const seenCards = new Set();
 
-        const els = document.querySelectorAll('div[data-testid*="card-content"], div.ghx-issue, a[href*="/browse/"]');
+        const els = document.querySelectorAll('div[data-testid*="card-content"], div.ghx-issue, div[data-testid="board.content.cell.card"], a[href*="/browse/"]');
         els.forEach((el) => {
             let card = null;
             if (el.tagName === 'A') {
                 if (/\/browse\/[A-Z][A-Z0-9]+-[0-9]+/.test(el.href)) {
                     const insideSoftwareCard = el.closest(
-                        'div[data-testid="platform-board-kit.ui.card.card"], div.ghx-issue, div.js-issue, div[data-testid*="card-content"]'
+                        'div[data-testid="platform-board-kit.ui.card.card"], div.ghx-issue, div.js-issue, div[data-testid*="card-content"], div[data-testid="board.content.cell.card"]'
                     );
                     const insideView = el.closest(
                         'div[role="dialog"], div[data-testid*="modal-dialog"], #jira-issue-header, ' +
